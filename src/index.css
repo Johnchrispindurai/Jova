@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-luxury-bg text-primary font-sans selection:bg-accent/30 selection:text-primary overflow-x-hidden;
+    letter-spacing: 0.015em;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif tracking-normal;
+  }
+}
+
+@layer utilities {
+  .text-justify-spacing {
+    text-align: justify;
+    text-justify: inter-word;
+  }
+}
+
+/* Custom premium scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F7F5F0;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C5A880;
+  border-radius: 0px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B0926A;
+}
+
+/* Glassmorphism */
+.glass-nav {
+  background: rgba(252, 252, 252, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glass-nav-dark {
+  background: rgba(17, 17, 17, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Hide scrollbar for clean carousels */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Image zoom and reveal transitions */
+.zoom-container {
+  overflow: hidden;
+  position: relative;
+}
+
+.zoom-image {
+  transition: transform 1.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.zoom-container:hover .zoom-image {
+  transform: scale(1.06);
+}
+
+/* Premium active size/color selector shadows */
+.active-ring {
+  box-shadow: 0 0 0 1px #111111, 0 0 0 4px rgba(197, 168, 128, 0.2);
+}
+
+/* Custom inputs */
+.premium-input {
+  @apply w-full bg-transparent border-b border-luxury-border py-3 px-1 text-sm focus:border-primary focus:outline-none transition-colors duration-300 font-sans;
+}
+
+.premium-label {
+  @apply text-xs uppercase tracking-widest text-primary-muted mb-1 block font-sans font-medium;
+}
+
+/* Smooth layout transitions */
+.page-transition-container {
+  will-change: opacity, transform;
+}

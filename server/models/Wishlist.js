@@ -1,0 +1,26 @@
+import mongoose from 'mongoose';
+
+const wishlistSchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.ObjectId,
+    ref: 'User',
+    required: [true, 'Wishlist item must belong to a user.'],
+  },
+  product: {
+    type: mongoose.Schema.ObjectId,
+    ref: 'Product',
+    required: [true, 'Wishlist item must refer to a product.'],
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+}, {
+  timestamps: true,
+});
+
+// Compound index to prevent duplicate entries
+wishlistSchema.index({ user: 1, product: 1 }, { unique: true });
+
+export const Wishlist = mongoose.model('Wishlist', wishlistSchema);
+export default Wishlist;

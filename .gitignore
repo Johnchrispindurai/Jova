@@ -1,0 +1,48 @@
+# Dependency directories
+node_modules/
+server/node_modules/
+
+# Build and production outputs
+dist/
+dist-ssr/
+build/
+server/uploads/*
+!server/uploads/.gitkeep
+
+# Environment files, tokens, and secrets
+.env
+.env.local
+.env.development
+.env.production
+.env.*.local
+server/.env
+server/.env.local
+server/.env.development
+server/.env.production
+server/.env.*
+*.pem
+*.key
+credentials.json
+client_secret*.json
+
+# Logs and databases
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.db
+*.sqlite
+
+# System and Editor files
+.vscode/
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
