@@ -13,8 +13,8 @@ const sendAuthSession = (user, message, res) => {
 
   const cookieOptions = {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'none',
+    secure: true,
   };
 
   res.cookie('accessToken', accessToken, {
@@ -190,12 +190,13 @@ export const refreshToken = async (req, res, next) => {
     const accessToken = signAccessToken(user._id);
 
     // Refresh access token cookie
-    res.cookie('accessToken', accessToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 15 * 60 * 1000, // 15 mins
-    });
+    // Refresh access token cookie
+res.cookie('accessToken', accessToken, {
+  httpOnly: true,
+  sameSite: 'none',
+  secure: true,
+  maxAge: 15 * 60 * 1000, // 15 mins
+});
 
     res.status(200).json({
       status: 'success',
