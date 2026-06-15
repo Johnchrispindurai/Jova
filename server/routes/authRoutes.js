@@ -35,21 +35,19 @@ router.get(
     const accessToken = signAccessToken(req.user._id);
     const refreshToken = signRefreshToken(req.user._id);
 
-    const cookieOptions = {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-    };
+res.cookie('accessToken', accessToken, {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'none',
+  maxAge: 15 * 60 * 1000, // 15 mins
+});
 
-    res.cookie('accessToken', accessToken, {
-      ...cookieOptions,
-      maxAge: 15 * 60 * 1000, // 15 mins
-    });
-
-    res.cookie('refreshToken', refreshToken, {
-      ...cookieOptions,
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+res.cookie('refreshToken', refreshToken, {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'none',
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+});
 
     // Redirect user back to the profile dashboard page on frontend
     res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/profile`);
