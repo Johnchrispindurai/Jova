@@ -12,29 +12,26 @@ export const signRefreshToken = (id) => {
   });
 };
 
+const cookieOptions = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'none',
+};
+
 export const sendAuthCookies = (user, statusCode, res) => {
   const accessToken = signAccessToken(user._id);
   const refreshToken = signRefreshToken(user._id);
 
-  const cookieOptions = {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-  };
-
-  // Set Access Token Cookie (expires in 15 minutes)
   res.cookie('accessToken', accessToken, {
     ...cookieOptions,
-    maxAge: 15 * 60 * 1000, // 15 mins in ms
+    maxAge: 15 * 60 * 1000,
   });
 
-  // Set Refresh Token Cookie (expires in 7 days)
   res.cookie('refreshToken', refreshToken, {
     ...cookieOptions,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
-  // Remove password from user object
   user.password = undefined;
 
   res.status(statusCode).json({
@@ -54,13 +51,13 @@ export const sendAuthCookies = (user, statusCode, res) => {
 };
 
 export const clearAuthCookies = (res) => {
-  const cookieOptions = {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    expires: new Date(0), // expire immediately
-  };
+  res.cookie('accessToken', '', {
+    ...cookieOptions,
+    expires: new Date(0),
+  });
 
-  res.cookie('accessToken', '', cookieOptions);
-  res.cookie('refreshToken', '', cookieOptions);
+  res.cookie('refreshToken', '', {
+    ...cookieOptions,
+    expires: new Date(0),
+  });
 };

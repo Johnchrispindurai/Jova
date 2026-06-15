@@ -10,12 +10,13 @@ import { sendOtpEmail } from '../services/emailService.js';
 const sendAuthSession = (user, message, res) => {
   const accessToken = signAccessToken(user._id);
   const refreshToken = signRefreshToken(user._id);
-
+  
   const cookieOptions = {
-    httpOnly: true,
-    sameSite: 'none',
-    secure: true,
-  };
+  httpOnly: true,
+  secure: true,
+  sameSite: 'none',
+};
+  
 
   res.cookie('accessToken', accessToken, {
     ...cookieOptions,
