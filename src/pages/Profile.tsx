@@ -26,6 +26,7 @@ export const Profile = () => {
     logout,
     updateProfile,
     addAddress,
+    fetchOrders,
     pendingCartAction,
     pendingWishlistAction
   } = useUserStore();
@@ -77,6 +78,13 @@ export const Profile = () => {
   }, [user]);
 
 
+
+  // Fetch real order history upon successful authentication
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchOrders();
+    }
+  }, [isAuthenticated, fetchOrders]);
 
   // Global guest intent restoration listener upon successful auth
   useEffect(() => {

@@ -23,38 +23,15 @@ interface UserState {
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  fetchOrders: () => Promise<void>;
   addOrder: (order: Order) => void;
   updateProfile: (profile: Partial<UserProfile>) => void;
   addAddress: (address: ShippingAddress) => void;
 }
 
-const DEFAULT_ORDERS: Order[] = [
-  {
-    id: 'JV-89021',
-    date: '2026-05-15',
-    items: [],
-    subtotal: 5499,
-    shippingFee: 0,
-    totalAmount: 5499,
-    shippingAddress: {
-      firstName: 'Charlotte',
-      lastName: 'Dubois',
-      email: 'charlotte.d@jova.com',
-      phone: '+1 (555) 019-2834',
-      address: '742 Rue de Rivoli',
-      city: 'Paris',
-      postalCode: '75001',
-      country: 'France',
-      deliveryMethod: 'Express Courier'
-    },
-    paymentMethod: 'Credit Card (Visa •••• 4321)',
-    status: 'Delivered'
-  }
-];
-
 export const useUserStore = create<UserState>((set) => ({
   user: null,
-  orders: DEFAULT_ORDERS,
+  orders: [],
   isAuthenticated: false,
   isCheckingAuth: true,
   pendingWishlistAction: (() => {
@@ -183,6 +160,28 @@ export const useUserStore = create<UserState>((set) => ({
     } finally {
       set({ user: null, isAuthenticated: false });
       useToastStore.getState().addToast('Successfully signed out.', 'info');
+    }
+  },
+
+  fetchOrders: async () => {
+    try {
+      const response = await api.get('/orders');
+      const fetchedOrders = response.data?.data?.orders || [];
+      const normalizedOrders = fetchedOrders.map((order: any) => ({
+        id: order.id || order._id,
+        date: order.date || (order.createdAt ? new Date(order.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
+        items: order.items || [],
+        subtotal: order.subtotal || 0,
+        shippingFee: order.shippingFee || 0,
+        totalAmount: order.totalAmount || 0,
+        shippingAddress: order.shippingAddress || {},
+        paymentMethod: order.paymentMethod || 'Credit Card',
+        status: order.status || 'Pending'
+      }));
+      set({ orders: normalizedOrders });
+    } catch (error) {
+      console.warn('Failed to fetch orders from backend, falling back to empty list:', error);
+      set({ orders: [] });
     }
   },
 
