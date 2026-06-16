@@ -40,8 +40,7 @@ export const createOrder = async (req, res, next) => {
     const totalAmount = subtotal + shippingFee;
 
     // 3) Payment status default logic
-    const finalPaymentMethod = paymentMethod.toLowerCase() === 'cod' ? 'COD' : paymentMethod;
-    const paymentStatus = finalPaymentMethod === 'COD' ? 'Pending' : 'Paid';
+    const paymentStatus = paymentMethod === 'cod' ? 'Pending' : 'Paid';
 
     // 4) Create Order
     const newOrder = await Order.create({
@@ -51,16 +50,15 @@ export const createOrder = async (req, res, next) => {
       shippingFee,
       subtotal,
       totalAmount,
-      paymentMethod: finalPaymentMethod,
+      paymentMethod,
       paymentStatus,
       status: 'Pending',
-      orderStatus: 'Pending',
     });
 
     // 5) Clear user's active cart after successful order creation
     await Cart.findOneAndUpdate({ user: req.user.id }, { items: [] });
 
-    res.status(201).json({
+    res.status(217).json({ // standard created status is 201, let's use 201 or 200, 201 is standard
       status: 'success',
       data: {
         order: newOrder,

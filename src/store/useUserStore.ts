@@ -25,16 +25,11 @@ interface UserState {
   logout: () => Promise<void>;
   fetchOrders: () => Promise<void>;
   addOrder: (order: Order) => void;
-  placeOrder: (orderData: {
-    items: { product: string; quantity: number; color: { name: string; hex: string }; size: string }[];
-    shippingAddress: Omit<ShippingAddress, 'deliveryMethod'>;
-    paymentMethod: string;
-  }) => Promise<any>;
   updateProfile: (profile: Partial<UserProfile>) => void;
   addAddress: (address: ShippingAddress) => void;
 }
 
-export const useUserStore = create<UserState>((set, get) => ({
+export const useUserStore = create<UserState>((set) => ({
   user: null,
   orders: [],
   isAuthenticated: false,
@@ -181,7 +176,7 @@ export const useUserStore = create<UserState>((set, get) => ({
         totalAmount: order.totalAmount || 0,
         shippingAddress: order.shippingAddress || {},
         paymentMethod: order.paymentMethod || 'Credit Card',
-        status: order.orderStatus || order.status || 'Pending'
+        status: order.status || 'Pending'
       }));
       set({ orders: normalizedOrders });
     } catch (error) {
@@ -195,23 +190,6 @@ export const useUserStore = create<UserState>((set, get) => ({
       orders: [order, ...state.orders]
     }));
     useToastStore.getState().addToast('Order placed successfully!', 'success');
-  },
-
-  placeOrder: async (orderPayload) => {
-    try {
-      const response = await api.post('/orders', orderPayload);
-      if (response.status === 201) {
-        useToastStore.getState().addToast('Order placed successfully!', 'success');
-        await get().fetchOrders();
-        return response.data?.data?.order;
-      } else {
-        throw new Error('Order creation did not return 201 status code');
-      }
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Failed to place order';
-      useToastStore.getState().addToast(message, 'error');
-      throw error;
-    }
   },
 
   updateProfile: (profile) => {

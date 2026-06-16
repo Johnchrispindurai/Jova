@@ -3,9 +3,6 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import dotenv from 'dotenv';
-import dns from 'dns';
-
-dns.setDefaultResultOrder('ipv4first');
 
 dotenv.config();
 

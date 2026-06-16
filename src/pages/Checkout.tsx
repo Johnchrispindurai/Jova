@@ -4,11 +4,10 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { CheckCircle, Truck, CreditCard, ShieldCheck, ArrowRight, ShoppingBag } from 'lucide-react';
-import { useCartQuery } from '../hooks/useCart';
+import { useCartQuery, useRemoveFromCartMutation } from '../hooks/useCart';
 import { useUserStore } from '../store/useUserStore';
-import type { Order } from '../types';
+import type { ShippingAddress, Order } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useQueryClient } from '@tanstack/react-query';
 
 // Zod schema with conditional validations based on payment method
 const checkoutSchema = z.object({
@@ -64,11 +63,15 @@ export const Checkout = () => {
     total: cartData?.total || 0,
   };
 
+  const removeFromCartMutation = useRemoveFromCartMutation();
+  const clearCart = async () => {
+    for (const item of cartItems) {
+      await removeFromCartMutation.mutateAsync(item._id);
+    }
+  };
 
-
-  const placeOrder = useUserStore((state) => state.placeOrder);
+  const addOrder = useUserStore((state) => state.addOrder);
   const user = useUserStore((state) => state.user);
-  const queryClient = useQueryClient();
 
   // Checkout Success Overlay State
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
@@ -120,71 +123,46 @@ export const Checkout = () => {
   const taxes = cartTotals.estimatedTax;
   const totalAmount = Math.max(0, cartTotals.subtotal + deliveryFee + taxes - discount);
 
-  const onSubmitForm = async (data: CheckoutFormValues) => {
-    try {
-      const shippingInfo = {
-        firstName: data.firstName,
-        lastName: data.lastName,
-        email: data.email,
-        phone: data.phone,
-        address: data.address,
-        city: data.city,
-        postalCode: data.postalCode,
-        country: data.country,
-      };
+  const onSubmitForm = (data: CheckoutFormValues) => {
+    // Simulate order placement
+    const shippingInfo: ShippingAddress = {
+      firstName: data.firstName,
+      lastName: data.lastName,
+      email: data.email,
+      phone: data.phone,
+      address: data.address,
+      city: data.city,
+      postalCode: data.postalCode,
+      country: data.country,
+      deliveryMethod:
+        data.deliveryMethod === 'express'
+          ? 'Express Overnight Courier'
+          : data.deliveryMethod === 'boutique'
+          ? 'Boutique Collection'
+          : 'Standard Delivery Courier',
+    };
 
-      const payloadItems = cartItems.map((item: any) => ({
-        product: item.product.id || item.product._id,
-        quantity: item.quantity,
-        color: {
-          name: item.color.name,
-          hex: item.color.hex,
-        },
-        size: item.size,
-      }));
+    const newOrder: Order = {
+      id: `JV-${Math.floor(10000 + Math.random() * 90000)}`,
+      date: new Date().toISOString().split('T')[0],
+      items: cartItems,
+      subtotal: cartTotals.subtotal,
+      shippingFee: deliveryFee,
+      totalAmount,
+      shippingAddress: shippingInfo,
+      paymentMethod:
+        data.paymentMethod === 'card'
+          ? `Credit Card (${data.cardNumber?.slice(-4) || '•••• 4321'})`
+          : data.paymentMethod === 'upi'
+          ? `UPI (${data.upiId})`
+          : 'Cash on Delivery (COD)',
+      status: 'Processing',
+    };
 
-      // Call store action to post to backend and retrieve normalized order
-      const placedOrder = await placeOrder({
-        items: payloadItems,
-        shippingAddress: shippingInfo,
-        paymentMethod: data.paymentMethod,
-      });
-
-      if (placedOrder) {
-        // Map the backend order model format to the frontend Order visual state
-        const successOrderInfo: Order = {
-          id: placedOrder.id || placedOrder._id || `JV-${Math.floor(10000 + Math.random() * 90000)}`,
-          date: placedOrder.date || (placedOrder.createdAt ? new Date(placedOrder.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
-          items: cartItems, // keep local cartItems with full product details for rich overlay display
-          subtotal: cartTotals.subtotal,
-          shippingFee: deliveryFee,
-          totalAmount: totalAmount,
-          shippingAddress: {
-            ...shippingInfo,
-            deliveryMethod:
-              data.deliveryMethod === 'express'
-                ? 'Express Overnight Courier'
-                : data.deliveryMethod === 'boutique'
-                ? 'Boutique Collection'
-                : 'Standard Delivery Courier',
-          },
-          paymentMethod:
-            data.paymentMethod === 'card'
-              ? `Credit Card (${data.cardNumber?.slice(-4) || '•••• 4321'})`
-              : data.paymentMethod === 'upi'
-              ? `UPI (${data.upiId})`
-              : 'Cash on Delivery (COD)',
-          status: placedOrder.orderStatus || placedOrder.status || 'Processing',
-        };
-
-        setSuccessOrder(successOrderInfo);
-
-        // Clear/invalidate frontend cart query cache only after successful 201 Created from backend
-        queryClient.invalidateQueries({ queryKey: ['cart'] });
-      }
-    } catch (error) {
-      console.error('Failed to submit checkout order:', error);
-    }
+    // Save order & Clear cart
+    addOrder(newOrder);
+    setSuccessOrder(newOrder);
+    clearCart();
   };
 
   if (isCartLoading) {
