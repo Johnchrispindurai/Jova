@@ -60,10 +60,10 @@ export const updateOrderStatus = async (req, res, next) => {
     }
 
     const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true, runValidators: true }
-    );
+       req.params.id,
+       { status, orderStatus: status },
+       { new: true, runValidators: true }
+     );
 
     if (!order) {
       return next(new AppError('No order found with that ID', 404));

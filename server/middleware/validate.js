@@ -63,8 +63,8 @@ export const validateOrder = (req, res, next) => {
   if (!firstName || !lastName || !email || !phone || !address || !city || !postalCode || !country) {
     return next(new AppError('Complete shipping address (first/last name, email, phone, address, city, postalCode, country) is required', 400));
   }
-  if (!paymentMethod || !['card', 'upi', 'cod'].includes(paymentMethod)) {
-    return next(new AppError('Valid payment method ("card", "upi", "cod") is required', 400));
+  if (!paymentMethod || !['card', 'upi', 'cod', 'COD'].includes(paymentMethod)) {
+    return next(new AppError('Valid payment method ("card", "upi", "cod", "COD") is required', 400));
   }
   next();
 };
