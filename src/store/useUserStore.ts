@@ -166,8 +166,7 @@ export const useUserStore = create<UserState>((set) => ({
   fetchOrders: async () => {
     try {
       const response = await api.get('/orders');
-      console.log('fetchOrders raw response object:', response);
-      console.log('fetchOrders response data payload:', response.data);
+      console.log("fetchOrders raw response:", response.data);
       const fetchedOrders = response.data?.data?.orders || [];
       const normalizedOrders = fetchedOrders.map((order: any) => ({
         id: order.id || order._id,

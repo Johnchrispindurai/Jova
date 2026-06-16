@@ -116,6 +116,7 @@ export const getMyOrders = async (req, res, next) => {
 
     const userObjectId = new mongoose.Types.ObjectId(authenticatedUserId);
     const orders = await Order.find({ user: userObjectId }).sort('-createdAt');
+    console.log("GET /orders response:", orders);
 
     res.status(200).json({
       status: 'success',
