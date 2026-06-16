@@ -7,6 +7,7 @@ import { useAddToCartMutation } from '../hooks/useCart';
 import { useUserStore } from '../store/useUserStore';
 import { useToastStore } from '../store/useToastStore';
 import { ProductDetailSkeleton } from '../components/common/SkeletonLoader';
+import { SizeGuideModal } from '../components/product/SizeGuideModal';
 import type { Review } from '../types';
 
 export const ProductDetail = () => {
@@ -22,6 +23,7 @@ export const ProductDetail = () => {
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
   const [errorMsg, setErrorMsg] = useState('');
+  const [showSizeGuide, setShowSizeGuide] = useState(false);
 
   // Accordion state
   const [activeAccordion, setActiveAccordion] = useState<'details' | 'care' | 'shipping' | null>('details');
@@ -317,7 +319,20 @@ export const ProductDetail = () => {
                   <span className="text-xs uppercase tracking-[0.15em] font-semibold text-[#111111]">Size:</span>
                   <span className="text-xs text-[#111111]/60 font-sans font-light uppercase tracking-wider">{selectedSize ? `${selectedSize} selected` : 'Select a size'}</span>
                 </div>
-                <span className="text-[10px] uppercase tracking-wider text-[#111111]/60 hover:text-black underline cursor-pointer font-sans">Size Guide</span>
+                <span
+                  onClick={() => setShowSizeGuide(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setShowSizeGuide(true);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  className="text-[10px] uppercase tracking-wider text-[#111111]/60 hover:text-black underline cursor-pointer font-sans focus:outline-none focus:text-black focus:ring-1 focus:ring-[#111111]/50 rounded-sm px-1"
+                >
+                  Size Guide
+                </span>
               </div>
               <div className="flex flex-wrap gap-2.5">
                 {product.sizes.map((size) => {
@@ -602,6 +617,12 @@ export const ProductDetail = () => {
           </div>
         </div>
       </section>
+
+      <SizeGuideModal
+        isOpen={showSizeGuide}
+        onClose={() => setShowSizeGuide(false)}
+        category={product?.category}
+      />
       </div>
     </div>
   );
