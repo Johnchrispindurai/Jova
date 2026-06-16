@@ -7,7 +7,77 @@ import { useAddToCartMutation } from '../hooks/useCart';
 import { useToastStore } from '../store/useToastStore';
 import { ProductCard } from '../components/product/ProductCard';
 import { EmptyState } from '../components/common/EmptyState';
+import { OrderHistoryErrorBoundary } from '../components/common/OrderHistoryErrorBoundary';
 import type { ShippingAddress, Product } from '../types';
+
+const PLACEHOLDER_IMAGE = "data:image/svg+xml;utf8,<svg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27133%27 viewBox=%270 0 100 133%27 fill=%27none%27><rect width=%27100%27 height=%27133%27 fill=%27%23F7F5F0%27/><text x=%2750%25%27 y=%2750%25%27 dominant-baseline=%27middle%27 text-anchor=%27middle%27 font-family=%27sans-serif%27 font-size=%2710%27 fill=%27%23767676%27 letter-spacing=%271%27>JOVA</text></svg>";
+
+interface ResolvedOrderItem {
+  id: string;
+  name: string;
+  price: number;
+  image: string;
+  size: string;
+  quantity: number;
+  colorName: string;
+  colorHex: string;
+}
+
+const resolveOrderItem = (item: any): ResolvedOrderItem => {
+  if (!item) {
+    return {
+      id: Math.random().toString(),
+      name: 'Unknown Product',
+      price: 0,
+      image: PLACEHOLDER_IMAGE,
+      size: 'N/A',
+      quantity: 1,
+      colorName: 'Default',
+      colorHex: '#000000',
+    };
+  }
+
+  const product = item.product;
+  const isPopulatedProduct = product && typeof product === 'object' && !Array.isArray(product);
+
+  const name = isPopulatedProduct ? (product.name || '') : (item.name || '');
+  const price = typeof (isPopulatedProduct ? product.price : item.price) === 'number'
+    ? (isPopulatedProduct ? product.price : item.price)
+    : 0;
+
+  let image = '';
+  if (isPopulatedProduct && Array.isArray(product.images) && product.images.length > 0) {
+    image = product.images[0];
+  } else if (item.image) {
+    image = item.image;
+  } else {
+    image = PLACEHOLDER_IMAGE;
+  }
+
+  const size = item.selectedSize || item.size || 'N/A';
+  const quantity = typeof item.quantity === 'number' ? item.quantity : 1;
+
+  let colorName = 'Default';
+  let colorHex = '#000000';
+  if (item.selectedColor && typeof item.selectedColor === 'object') {
+    colorName = item.selectedColor.name || colorName;
+    colorHex = item.selectedColor.hex || colorHex;
+  } else if (item.color && typeof item.color === 'object') {
+    colorName = item.color.name || colorName;
+    colorHex = item.color.hex || colorHex;
+  }
+
+  return {
+    id: item.id || item._id || Math.random().toString(),
+    name: name || 'Unknown Product',
+    price,
+    image,
+    size,
+    quantity,
+    colorName,
+    colorHex,
+  };
+};
 
 export const Profile = () => {
   const location = useLocation();
@@ -525,7 +595,7 @@ export const Profile = () => {
                 : 'border-transparent text-primary-muted hover:bg-luxury-cream/30 hover:text-primary'
             }`}
           >
-            <Package className="w-4 h-4 stroke-[1.5]" /> Order History ({orders.length})
+            <Package className="w-4 h-4 stroke-[1.5]" /> Order History ({orders ? orders.length : 0})
           </button>
 
           <button
@@ -584,60 +654,68 @@ export const Profile = () => {
           {activeTab === 'orders' && (
             <div className="animate-fade-in flex flex-col gap-6">
               <h3 className="text-sm uppercase tracking-widest font-bold border-b border-luxury-border pb-4 mb-2">Order History</h3>
-              {orders.length === 0 ? (
-                <EmptyState type="order" />
-              ) : (
-                <div className="flex flex-col gap-6">
-                  {orders.map((order) => (
-                    <div key={order.id} className="border border-luxury-border p-5 flex flex-col gap-4">
-                      {/* Top bar info */}
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-luxury-border pb-3 gap-2">
-                        <div className="text-xs font-sans">
-                          <span className="text-primary-muted uppercase tracking-wider block">Order ID</span>
-                          <strong className="text-primary text-sm font-semibold">{order.id}</strong>
-                        </div>
-                        <div className="text-xs font-sans">
-                          <span className="text-primary-muted uppercase tracking-wider block">Placed on</span>
-                          <strong className="text-primary font-semibold">{order.date}</strong>
-                        </div>
-                        <div className="text-xs font-sans">
-                          <span className="text-primary-muted uppercase tracking-wider block">Total paid</span>
-                          <strong className="text-accent text-sm font-bold">₹{order.totalAmount.toLocaleString('en-IN')}</strong>
-                        </div>
-                        <span className={`px-3 py-1 text-[9px] uppercase tracking-widest font-sans font-bold border ${
-                          order.status === 'Delivered'
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                            : 'border-amber-200 bg-amber-50 text-amber-700'
-                        }`}>
-                          {order.status}
-                        </span>
-                      </div>
-
-                      {/* Items details */}
-                      <div className="flex flex-col gap-3">
-                        {order.items.length === 0 ? (
-                          <p className="text-xs text-primary-muted font-sans italic">Sample Order (Pre-loaded Mock Order details)</p>
-                        ) : (
-                          order.items.map((item) => (
-                            <div key={item.id} className="flex gap-4 items-center justify-between">
-                              <div className="flex gap-3 items-center">
-                                <div className="w-10 aspect-[3/4] overflow-hidden bg-luxury-cream border border-luxury-border/50">
-                                  <img src={item.product.images[0]} alt={item.product.name} className="w-full h-full object-cover" />
-                                </div>
-                                <div className="text-xs font-sans">
-                                  <h4 className="font-semibold text-primary uppercase max-w-[200px] truncate">{item.product.name}</h4>
-                                  <p className="text-[10px] text-primary-muted uppercase mt-0.5">Size: {item.selectedSize} &bull; QTY: {item.quantity}</p>
-                                </div>
-                              </div>
-                              <span className="text-xs font-semibold font-sans">₹{(item.product.price * item.quantity).toLocaleString('en-IN')}</span>
+              <OrderHistoryErrorBoundary>
+                {(!orders || orders.length === 0) ? (
+                  <EmptyState type="order" />
+                ) : (
+                  <div className="flex flex-col gap-6">
+                    {orders.map((order) => {
+                      const orderItems = Array.isArray(order.items) ? order.items : [];
+                      return (
+                        <div key={order.id} className="border border-luxury-border p-5 flex flex-col gap-4">
+                          {/* Top bar info */}
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-luxury-border pb-3 gap-2">
+                            <div className="text-xs font-sans">
+                              <span className="text-primary-muted uppercase tracking-wider block">Order ID</span>
+                              <strong className="text-primary text-sm font-semibold">{order.id}</strong>
                             </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                            <div className="text-xs font-sans">
+                              <span className="text-primary-muted uppercase tracking-wider block">Placed on</span>
+                              <strong className="text-primary font-semibold">{order.date}</strong>
+                            </div>
+                            <div className="text-xs font-sans">
+                              <span className="text-primary-muted uppercase tracking-wider block">Total paid</span>
+                              <strong className="text-accent text-sm font-bold">₹{typeof order.totalAmount === 'number' ? order.totalAmount.toLocaleString('en-IN') : '0'}</strong>
+                            </div>
+                            <span className={`px-3 py-1 text-[9px] uppercase tracking-widest font-sans font-bold border ${
+                              order.status === 'Delivered'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : 'border-amber-200 bg-amber-50 text-amber-700'
+                            }`}>
+                              {order.status}
+                            </span>
+                          </div>
+
+                          {/* Items details */}
+                          <div className="flex flex-col gap-3">
+                            {orderItems.length === 0 ? (
+                              <p className="text-xs text-primary-muted font-sans italic">Order details unavailable</p>
+                            ) : (
+                              orderItems.map((item) => {
+                                const resolved = resolveOrderItem(item);
+                                return (
+                                  <div key={resolved.id} className="flex gap-4 items-center justify-between">
+                                    <div className="flex gap-3 items-center">
+                                      <div className="w-10 aspect-[3/4] overflow-hidden bg-luxury-cream border border-luxury-border/50 flex-shrink-0">
+                                        <img src={resolved.image} alt={resolved.name} className="w-full h-full object-cover" />
+                                      </div>
+                                      <div className="text-xs font-sans">
+                                        <h4 className="font-semibold text-primary uppercase max-w-[200px] truncate">{resolved.name}</h4>
+                                        <p className="text-[10px] text-primary-muted uppercase mt-0.5">Size: {resolved.size} &bull; QTY: {resolved.quantity}</p>
+                                      </div>
+                                    </div>
+                                    <span className="text-xs font-semibold font-sans">₹{(resolved.price * resolved.quantity).toLocaleString('en-IN')}</span>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </OrderHistoryErrorBoundary>
             </div>
           )}
 

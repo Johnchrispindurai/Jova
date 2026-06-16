@@ -20,18 +20,42 @@ export const createOrder = async (req, res, next) => {
         return next(new AppError(`Product is out of stock: ${dbProduct.name}`, 400));
       }
 
+      // Resolve image safely
+      const itemImage = (Array.isArray(dbProduct.images) && dbProduct.images.length > 0)
+        ? dbProduct.images[0]
+        : '/placeholder-image.jpg';
+
+      // Resolve color defensively
+      let itemColor = { name: 'Default', hex: '#000000' };
+      if (item.color && typeof item.color === 'object' && item.color.name && item.color.hex) {
+        itemColor = { name: String(item.color.name), hex: String(item.color.hex) };
+      } else if (Array.isArray(dbProduct.colors) && dbProduct.colors.length > 0) {
+        const firstColor = dbProduct.colors[0];
+        itemColor = { name: firstColor.name, hex: firstColor.hex };
+      }
+
+      // Resolve size defensively
+      const itemSize = item.size 
+        ? String(item.size) 
+        : (Array.isArray(dbProduct.sizes) && dbProduct.sizes.length > 0 ? dbProduct.sizes[0] : 'One Size');
+
+      // Resolve quantity defensively
+      const itemQuantity = (typeof item.quantity === 'number' && item.quantity > 0)
+        ? item.quantity
+        : 1;
+
       // Add details to items snapshot
-      const itemSubtotal = dbProduct.price * item.quantity;
+      const itemSubtotal = dbProduct.price * itemQuantity;
       subtotal += itemSubtotal;
 
       orderItems.push({
         product: dbProduct._id,
         name: dbProduct.name,
         price: dbProduct.price,
-        image: dbProduct.images[0],
-        color: item.color,
-        size: item.size,
-        quantity: item.quantity,
+        image: itemImage,
+        color: itemColor,
+        size: itemSize,
+        quantity: itemQuantity,
       });
     }
 
