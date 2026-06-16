@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Order from '../models/Order.js';
 import Cart from '../models/Cart.js';
 import Product from '../models/Product.js';
@@ -5,6 +6,15 @@ import AppError from '../utils/AppError.js';
 
 export const createOrder = async (req, res, next) => {
   try {
+    console.log("createOrder - req.user:", req.user);
+    console.log("createOrder - req.user.id:", req.user?.id);
+    console.log("createOrder - req.user._id:", req.user?._id);
+
+    const authenticatedUserId = req.user?._id || req.user?.id || req.user?.userId;
+    if (!authenticatedUserId) {
+      return next(new AppError('User authentication details are missing', 401));
+    }
+
     const { items, shippingAddress, paymentMethod } = req.body;
 
     // 1) Verify all products exist and calculate subtotal
@@ -68,7 +78,7 @@ export const createOrder = async (req, res, next) => {
 
     // 4) Create Order
     const newOrder = await Order.create({
-      user: req.user.id,
+      user: new mongoose.Types.ObjectId(authenticatedUserId),
       items: orderItems,
       shippingAddress,
       shippingFee,
@@ -95,7 +105,17 @@ export const createOrder = async (req, res, next) => {
 
 export const getMyOrders = async (req, res, next) => {
   try {
-    const orders = await Order.find({ user: req.user.id }).sort('-createdAt');
+    console.log("getMyOrders - req.user:", req.user);
+    console.log("getMyOrders - req.user.id:", req.user?.id);
+    console.log("getMyOrders - req.user._id:", req.user?._id);
+
+    const authenticatedUserId = req.user?._id || req.user?.id || req.user?.userId;
+    if (!authenticatedUserId) {
+      return next(new AppError('User authentication details are missing', 401));
+    }
+
+    const userObjectId = new mongoose.Types.ObjectId(authenticatedUserId);
+    const orders = await Order.find({ user: userObjectId }).sort('-createdAt');
 
     res.status(200).json({
       status: 'success',
@@ -117,8 +137,13 @@ export const getOrder = async (req, res, next) => {
       return next(new AppError('No order found with that ID', 404));
     }
 
+    const authenticatedUserId = req.user?._id || req.user?.id || req.user?.userId;
+    if (!authenticatedUserId) {
+      return next(new AppError('User authentication details are missing', 401));
+    }
+
     // Restrict access to order owner or admin users
-    if (order.user.toString() !== req.user.id && req.user.role !== 'admin') {
+    if (order.user.toString() !== authenticatedUserId.toString() && req.user.role !== 'admin') {
       return next(new AppError('You do not have permission to view this order', 403));
     }
 
