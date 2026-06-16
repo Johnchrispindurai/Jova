@@ -1,21 +1,19 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { User } from '../models/User.js';
-import { TempUser } from '../models/TempUser.js';
 import AppError from '../utils/AppError.js';
 import { sendAuthCookies, clearAuthCookies, signAccessToken, signRefreshToken } from '../utils/jwt.js';
-import { sendOtpEmail } from '../services/emailService.js';
 
-// Helper to set cookies and send a standard 2FA response payload
-const sendAuthSession = (user, message, res) => {
+// Helper to set cookies and send a standard response payload
+const sendAuthSession = (user, message, res, statusCode = 200) => {
   const accessToken = signAccessToken(user._id);
   const refreshToken = signRefreshToken(user._id);
   
   const cookieOptions = {
-  httpOnly: true,
-  secure: true,
-  sameSite: 'none',
-};
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+  };
   
 
   res.cookie('accessToken', accessToken, {
@@ -30,7 +28,7 @@ const sendAuthSession = (user, message, res) => {
 
   user.password = undefined;
 
-  res.status(200).json({
+  res.status(statusCode).json({
     success: true,
     message,
     accessToken,
@@ -57,33 +55,17 @@ export const register = async (req, res, next) => {
       return next(new AppError('Email is already registered', 400));
     }
 
-    // Clean up any stale temp registration sessions for this email
-    await TempUser.findOneAndDelete({ email });
-
-    // Generate secure 6-digit OTP
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashedOtp = await bcrypt.hash(otpCode, 12);
-
-    // Save temporary registration details
-    await TempUser.create({
+    // Create permanent user account directly
+    const newUser = await User.create({
       name,
       email,
-      password, // hashed inside TempUser schema pre-save hook
-      otp: {
-        code: hashedOtp,
-        expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
-        attempts: 0,
-        generatedAt: new Date(),
-      },
+      password, // hashed inside User schema pre-save hook
+      role: 'user',
+      isEmailVerified: true,
     });
 
-    // Send OTP via Nodemailer
-    await sendOtpEmail(email, otpCode);
-
-    res.status(200).json({
-      success: true,
-      message: 'Verification code sent successfully',
-    });
+    // Issue cookies and auto log in
+    sendAuthSession(newUser, 'Account created successfully', res, 201);
   } catch (error) {
     next(error);
   }
@@ -111,35 +93,8 @@ export const login = async (req, res, next) => {
       return next(new AppError('Incorrect email or password', 401));
     }
 
-    // Cooldown check (60 seconds)
-    if (user.otp && user.otp.generatedAt) {
-      const elapsedSeconds = Math.floor((Date.now() - new Date(user.otp.generatedAt).getTime()) / 1000);
-      if (elapsedSeconds < 60) {
-        return next(new AppError(`Please wait ${60 - elapsedSeconds} seconds before requesting a new code.`, 429));
-      }
-    }
-
-    // Generate secure 6-digit OTP
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // Store bcrypt hashed OTP
-    const hashedOtp = await bcrypt.hash(otpCode, 12);
-    user.otp = {
-      code: hashedOtp,
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
-      attempts: 0,
-      generatedAt: new Date(),
-    };
-
-    await user.save();
-
-    // Send OTP via Nodemailer
-    await sendOtpEmail(email, otpCode);
-
-    res.status(200).json({
-      success: true,
-      message: 'Verification code sent successfully',
-    });
+    // Issue cookies and login directly
+    sendAuthSession(user, 'Login successful', res);
   } catch (error) {
     next(error);
   }
@@ -206,199 +161,5 @@ res.cookie('accessToken', accessToken, {
   } catch (error) {
     // If jwt verification fails, throw a custom 401
     return next(new AppError('Invalid or expired refresh token. Please log in again.', 401));
-  }
-};
-
-// POST /api/auth/verify-register-otp
-export const verifyRegisterOtp = async (req, res, next) => {
-  try {
-    const { email, otp } = req.body;
-
-    if (!email || !otp) {
-      return next(new AppError('Email and verification code are required', 400));
-    }
-
-    const tempUser = await TempUser.findOne({ email });
-    if (!tempUser) {
-      return next(new AppError('No pending registration found for this email', 400));
-    }
-
-    // Check expiry
-    if (Date.now() > new Date(tempUser.otp.expiresAt).getTime()) {
-      return next(new AppError('Verification code has expired. Please register again.', 400));
-    }
-
-    // Check attempts limit (max 3)
-    if (tempUser.otp.attempts >= 3) {
-      return next(new AppError('Maximum verification attempts exceeded. Please register again.', 400));
-    }
-
-    // Increment attempts count
-    tempUser.otp.attempts += 1;
-    await tempUser.save();
-
-    // Verify code match using bcrypt.compare
-    const isCodeMatch = await bcrypt.compare(otp.toString().trim(), tempUser.otp.code);
-    if (!isCodeMatch) {
-      return next(new AppError('Incorrect verification code. Please try again.', 400));
-    }
-
-    // Success: create permanent user account
-    const newUser = await User.create({
-      name: tempUser.name,
-      email: tempUser.email,
-      password: tempUser.password, // already hashed in tempUser pre-save
-      role: 'user',
-      isEmailVerified: true,
-    });
-
-    // Delete temporary record
-    await TempUser.findOneAndDelete({ email });
-
-    // Issue JWT cookies and auto log in
-    sendAuthSession(newUser, 'Account created successfully', res);
-  } catch (error) {
-    next(error);
-  }
-};
-
-// POST /api/auth/resend-register-otp
-export const resendRegisterOtp = async (req, res, next) => {
-  try {
-    const { email } = req.body;
-
-    if (!email || !email.trim()) {
-      return next(new AppError('Email is required', 400));
-    }
-
-    const tempUser = await TempUser.findOne({ email });
-    if (!tempUser) {
-      return next(new AppError('No pending registration found for this email', 404));
-    }
-
-    // Cooldown check (60 seconds)
-    if (tempUser.otp && tempUser.otp.generatedAt) {
-      const elapsedSeconds = Math.floor((Date.now() - new Date(tempUser.otp.generatedAt).getTime()) / 1000);
-      if (elapsedSeconds < 60) {
-        return next(new AppError(`Please wait ${60 - elapsedSeconds} seconds before requesting a new code.`, 429));
-      }
-    }
-
-    // Generate 6-digit OTP
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashedOtp = await bcrypt.hash(otpCode, 12);
-
-    // Update OTP fields
-    tempUser.otp = {
-      code: hashedOtp,
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
-      attempts: 0,
-      generatedAt: new Date(),
-    };
-
-    await tempUser.save();
-
-    // Dispatch email
-    await sendOtpEmail(email, otpCode);
-
-    res.status(200).json({
-      success: true,
-      message: 'Verification code resent successfully',
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// POST /api/auth/verify-login-otp
-export const verifyLoginOtp = async (req, res, next) => {
-  try {
-    const { email, otp } = req.body;
-
-    if (!email || !otp) {
-      return next(new AppError('Email and verification code are required', 400));
-    }
-
-    const user = await User.findOne({ email });
-    if (!user || !user.otp || !user.otp.code) {
-      return next(new AppError('No active verification code found for this email', 400));
-    }
-
-    // Check expiry
-    if (Date.now() > new Date(user.otp.expiresAt).getTime()) {
-      return next(new AppError('Verification code has expired. Please request a new one.', 400));
-    }
-
-    // Check attempts limit (max 3)
-    if (user.otp.attempts >= 3) {
-      return next(new AppError('Maximum verification attempts exceeded. Please request a new code.', 400));
-    }
-
-    // Increment attempts count
-    user.otp.attempts += 1;
-    await user.save();
-
-    // Verify code match using bcrypt.compare
-    const isCodeMatch = await bcrypt.compare(otp.toString().trim(), user.otp.code);
-    if (!isCodeMatch) {
-      return next(new AppError('Incorrect verification code. Please try again.', 400));
-    }
-
-    // Clear OTP fields immediately after success
-    user.otp = undefined;
-    await user.save();
-
-    // Issue cookies and login
-    sendAuthSession(user, 'Login successful', res);
-  } catch (error) {
-    next(error);
-  }
-};
-
-// POST /api/auth/resend-login-otp
-export const resendLoginOtp = async (req, res, next) => {
-  try {
-    const { email } = req.body;
-
-    if (!email || !email.trim()) {
-      return next(new AppError('Email is required', 400));
-    }
-
-    const user = await User.findOne({ email });
-    if (!user) {
-      return next(new AppError('No user found with this email address', 404));
-    }
-
-    // Cooldown check (60 seconds)
-    if (user.otp && user.otp.generatedAt) {
-      const elapsedSeconds = Math.floor((Date.now() - new Date(user.otp.generatedAt).getTime()) / 1000);
-      if (elapsedSeconds < 60) {
-        return next(new AppError(`Please wait ${60 - elapsedSeconds} seconds before requesting a new code.`, 429));
-      }
-    }
-
-    // Generate 6-digit OTP
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashedOtp = await bcrypt.hash(otpCode, 12);
-
-    // Update OTP fields
-    user.otp = {
-      code: hashedOtp,
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
-      attempts: 0,
-      generatedAt: new Date(),
-    };
-
-    await user.save();
-
-    // Dispatch email
-    await sendOtpEmail(email, otpCode);
-
-    res.status(200).json({
-      success: true,
-      message: 'Verification code resent successfully',
-    });
-  } catch (error) {
-    next(error);
   }
 };

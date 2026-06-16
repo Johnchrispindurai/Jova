@@ -38,12 +38,6 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
-  otp: {
-    code: String,
-    expiresAt: Date,
-    attempts: { type: Number, default: 0 },
-    generatedAt: Date,
-  },
   createdAt: {
     type: Date,
     default: Date.now,

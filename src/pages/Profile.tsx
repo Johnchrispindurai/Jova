@@ -26,14 +26,6 @@ export const Profile = () => {
     logout,
     updateProfile,
     addAddress,
-    authStep,
-    pendingRegisterEmail,
-    pendingLoginEmail,
-    setAuthStep,
-    verifyRegisterOtp,
-    resendRegisterOtp,
-    verifyLoginOtp,
-    resendLoginOtp,
     pendingCartAction,
     pendingWishlistAction
   } = useUserStore();
@@ -64,12 +56,6 @@ export const Profile = () => {
   const [regPassword, setRegPassword] = useState('');
   const [regConfirm, setRegConfirm] = useState('');
 
-  // OTP inputs
-  const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
-  const [otpCountdown, setOtpCountdown] = useState(0);
-  const [otpAttemptsLeft, setOtpAttemptsLeft] = useState(3);
-  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
-
   // Address modal/form states
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [newStreet, setNewStreet] = useState('');
@@ -90,82 +76,7 @@ export const Profile = () => {
     }
   }, [user]);
 
-  // Cooldown countdown timer for OTP resends
-  useEffect(() => {
-    if (otpCountdown <= 0) return;
-    const timer = setInterval(() => {
-      setOtpCountdown((prev) => prev - 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [otpCountdown]);
 
-  // Restore OTP session details on authStep changes
-  useEffect(() => {
-    const pendingGeneratedAt = sessionStorage.getItem('pendingOtpGeneratedAt');
-    const pendingAttempts = sessionStorage.getItem('pendingOtpAttempts');
-    if (pendingAttempts) {
-      setOtpAttemptsLeft(parseInt(pendingAttempts, 10));
-    }
-    if (pendingGeneratedAt) {
-      const elapsed = Math.floor((Date.now() - parseInt(pendingGeneratedAt, 10)) / 1000);
-      if (elapsed < 60) {
-        setOtpCountdown(60 - elapsed);
-      } else {
-        setOtpCountdown(0);
-      }
-    }
-  }, [authStep]);
-
-  // Auto-focus first input when OTP screen opens
-  useEffect(() => {
-    if (authStep !== 'idle') {
-      setTimeout(() => {
-        const firstInput = document.getElementById('otp-input-0');
-        firstInput?.focus();
-      }, 50);
-    }
-  }, [authStep]);
-
-  const handleDigitChange = (index: number, value: string) => {
-    const digit = value.slice(-1);
-    if (digit && !/^\d$/.test(digit)) return;
-
-    const newDigits = [...otpDigits];
-    newDigits[index] = digit;
-    setOtpDigits(newDigits);
-
-    if (digit && index < 5) {
-      const nextInput = document.getElementById(`otp-input-${index + 1}`);
-      nextInput?.focus();
-    }
-  };
-
-  const handleDigitKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace') {
-      const newDigits = [...otpDigits];
-      if (!otpDigits[index] && index > 0) {
-        newDigits[index - 1] = '';
-        setOtpDigits(newDigits);
-        const prevInput = document.getElementById(`otp-input-${index - 1}`);
-        prevInput?.focus();
-      } else {
-        newDigits[index] = '';
-        setOtpDigits(newDigits);
-      }
-    }
-  };
-
-  const handleDigitPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    const pastedData = e.clipboardData.getData('text').trim();
-    if (!/^\d{6}$/.test(pastedData)) return;
-
-    const newDigits = pastedData.split('');
-    setOtpDigits(newDigits);
-
-    const lastInput = document.getElementById('otp-input-5');
-    lastInput?.focus();
-  };
 
   // Global guest intent restoration listener upon successful auth
   useEffect(() => {
@@ -233,7 +144,6 @@ export const Profile = () => {
 
     try {
       await login(loginEmail, loginPassword);
-      setOtpDigits(['', '', '', '', '', '']);
     } catch (err: any) {
       setAuthError(err.response?.data?.message || 'Incorrect email or password');
     }
@@ -260,7 +170,6 @@ export const Profile = () => {
 
     try {
       await signup(regName, regEmail, regPassword);
-      setOtpDigits(['', '', '', '', '', '']);
     } catch (err: any) {
       setAuthError(err.response?.data?.message || 'Registration failed');
     }
@@ -270,55 +179,7 @@ export const Profile = () => {
     window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/google`;
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError('');
-    const code = otpDigits.join('');
-    if (code.length !== 6) {
-      setAuthError('Please enter a valid 6-digit verification code');
-      return;
-    }
-    setIsVerifyingOtp(true);
-    try {
-      if (authStep === 'registerOtp' && pendingRegisterEmail) {
-        await verifyRegisterOtp(pendingRegisterEmail, code);
-      } else if (authStep === 'loginOtp' && pendingLoginEmail) {
-        await verifyLoginOtp(pendingLoginEmail, code);
-      }
-    } catch (err: any) {
-      const nextAttempts = Math.max(0, otpAttemptsLeft - 1);
-      setOtpAttemptsLeft(nextAttempts);
-      sessionStorage.setItem('pendingOtpAttempts', nextAttempts.toString());
-      setAuthError(err.response?.data?.message || 'Verification failed');
-    } finally {
-      setIsVerifyingOtp(false);
-    }
-  };
 
-  const handleResendOtp = async () => {
-    if (otpCountdown > 0) return;
-    setAuthError('');
-    try {
-      if (authStep === 'registerOtp' && pendingRegisterEmail) {
-        await resendRegisterOtp(pendingRegisterEmail);
-      } else if (authStep === 'loginOtp' && pendingLoginEmail) {
-        await resendLoginOtp(pendingLoginEmail);
-      }
-      setOtpCountdown(60);
-      setOtpDigits(['', '', '', '', '', '']);
-      setTimeout(() => {
-        const firstInput = document.getElementById('otp-input-0');
-        firstInput?.focus();
-      }, 50);
-    } catch (err: any) {
-      setAuthError(err.response?.data?.message || 'Failed to resend code');
-    }
-  };
-
-  const handleBackToLoginClick = () => {
-    setAuthStep('idle');
-    setAuthError('');
-  };
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -357,8 +218,7 @@ export const Profile = () => {
 
   // ================= RENDER AUTHENTICATION VIEW (IF LOGGED OUT) =================
   if (!isAuthenticated || !user) {
-    const activeOtpEmail = authStep === 'registerOtp' ? pendingRegisterEmail : pendingLoginEmail;
-    const isOtpStep = authStep !== 'idle';
+
 
     const hasPendingAction = pendingCartAction || pendingWishlistAction;
     let actionText = "";
@@ -391,305 +251,232 @@ export const Profile = () => {
             </div>
           )}
 
-          {isOtpStep ? (
-            /* Premium OTP verification screen */
-            <div className="flex flex-col gap-6 animate-fade-in">
-              <h2 className="text-[10px] uppercase font-bold tracking-[0.15em] text-[#111111] text-center font-sans">
-                Verification Required
-              </h2>
-              
-              <p className="text-[11px] text-center text-primary-muted font-sans leading-relaxed font-light">
-                We've sent a verification code to your email.<br />
-                <strong className="text-primary font-semibold">{activeOtpEmail}</strong>
-              </p>
+          {/* Normal Login/Register screen */}
+          <div className="flex flex-col gap-6 animate-fade-in">
+            <h2 className="text-[10px] uppercase font-bold tracking-[0.15em] text-[#111111] text-center font-sans">
+              {isLoginTab ? 'SIGN IN TO YOUR JOVA ACCOUNT' : 'CREATE YOUR JOVA ACCOUNT'}
+            </h2>
 
-              {authError && (
-                <div className="bg-rose-50 border border-rose-200 text-rose-600 p-3 text-[11px] font-sans flex items-center gap-2 animate-fade-in rounded-lg">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  <span>{authError}</span>
-                </div>
-              )}
+            {authError && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-600 p-3 text-[11px] font-sans flex items-center gap-2 animate-fade-in rounded-lg">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{authError}</span>
+              </div>
+            )}
 
-              <form onSubmit={handleVerifyOtp} className="flex flex-col gap-6">
+            {isLoginTab ? (
+              /* SIGN IN FORM */
+              <form onSubmit={handleLoginSubmit} className="flex flex-col gap-4">
                 <div>
-                  <label className="text-[10px] uppercase font-bold tracking-widest text-[#111111] text-center block mb-3 font-sans">Enter 6-Digit Code</label>
-                  <div className="flex justify-between gap-2">
-                    {otpDigits.map((digit, idx) => (
-                      <input
-                        key={idx}
-                        id={`otp-input-${idx}`}
-                        type="text"
-                        maxLength={1}
-                        value={digit}
-                        onChange={(e) => handleDigitChange(idx, e.target.value)}
-                        onKeyDown={(e) => handleDigitKeyDown(idx, e)}
-                        onPaste={idx === 0 ? handleDigitPaste : undefined}
-                        className="w-11 h-14 bg-white border border-[#cccccc] focus:border-black text-center text-lg font-bold font-sans outline-none transition-all duration-300 focus:ring-1 focus:ring-black rounded-lg"
-                      />
-                    ))}
-                  </div>
+                  <label htmlFor="login-email" className="text-[10px] uppercase font-bold tracking-widest text-[#111111] mb-1.5 block font-sans">Email Address</label>
+                  <input
+                    id="login-email"
+                    type="email"
+                    placeholder="Enter your email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    className="w-full bg-white border border-[#cccccc] px-4 py-3 text-sm focus:border-black focus:outline-none transition-colors font-sans rounded-md text-primary"
+                  />
                 </div>
 
-                <div className="flex justify-between items-center text-[10px] font-sans text-primary-muted font-light uppercase tracking-wider">
-                  <span>Attempts left: <strong className="text-primary font-semibold">{otpAttemptsLeft}</strong></span>
-                  {otpCountdown > 0 ? (
-                    <span>Resend in <strong className="text-primary font-semibold">{otpCountdown}s</strong></span>
-                  ) : (
+                <div>
+                  <div className="flex justify-between items-baseline mb-1.5">
+                    <label htmlFor="login-password" className="text-[10px] uppercase font-bold tracking-widest text-[#111111] block font-sans">Password</label>
+                    <span className="text-[10px] text-primary-muted hover:text-[#111111] cursor-pointer uppercase tracking-wider font-semibold font-sans underline">Forgot Password?</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      id="login-password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      className="w-full bg-white border border-[#cccccc] pl-4 pr-12 py-3 text-sm focus:border-black focus:outline-none transition-colors font-sans rounded-md text-primary"
+                    />
                     <button
                       type="button"
-                      onClick={handleResendOtp}
-                      className="text-[#c5a880] hover:text-[#111111] font-bold uppercase tracking-wider underline cursor-pointer bg-transparent border-none p-0"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-wider text-primary-muted hover:text-[#111111] font-sans font-bold flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
                     >
-                      Resend Code
+                      {showPassword ? (
+                        <>
+                          <EyeOff className="w-3.5 h-3.5" />
+                          <span>Hide</span>
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Show</span>
+                        </>
+                      )}
                     </button>
-                  )}
+                  </div>
                 </div>
 
                 <button
                   type="submit"
-                  disabled={isVerifyingOtp}
-                  className="w-full bg-[#1c1c1c] hover:bg-black text-white border border-[#1c1c1c] hover:border-black py-3.5 text-xs uppercase tracking-widest font-sans font-bold transition-all duration-300 rounded-full cursor-pointer disabled:opacity-50 active:scale-[0.99]"
+                  className="w-full bg-[#1c1c1c] hover:bg-black text-white border border-[#1c1c1c] hover:border-black py-3.5 text-xs uppercase tracking-widest font-sans font-bold transition-all duration-300 rounded-full cursor-pointer shadow-md shadow-black/10 active:scale-[0.99] mt-2"
                 >
-                  {isVerifyingOtp ? 'Verifying...' : 'Verify & Log In'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleBackToLoginClick}
-                  className="w-full text-center text-[10px] text-primary-muted hover:text-[#111111] transition-colors font-sans mt-2 underline uppercase tracking-widest font-bold bg-transparent border-none cursor-pointer"
-                >
-                  Back to Login
+                  Sign In
                 </button>
               </form>
-            </div>
-          ) : (
-            /* Normal Login/Register screen */
-            <div className="flex flex-col gap-6 animate-fade-in">
-              <h2 className="text-[10px] uppercase font-bold tracking-[0.15em] text-[#111111] text-center font-sans">
-                {isLoginTab ? 'SIGN IN TO YOUR JOVA ACCOUNT' : 'CREATE YOUR JOVA ACCOUNT'}
-              </h2>
-
-              {authError && (
-                <div className="bg-rose-50 border border-rose-200 text-rose-600 p-3 text-[11px] font-sans flex items-center gap-2 animate-fade-in rounded-lg">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  <span>{authError}</span>
+            ) : (
+              /* CREATE ACCOUNT FORM */
+              <form onSubmit={handleSignupSubmit} className="flex flex-col gap-4">
+                <div>
+                  <label htmlFor="reg-name" className="text-[10px] uppercase font-bold tracking-widest text-[#111111] mb-1.5 block font-sans">Full Name</label>
+                  <input
+                    id="reg-name"
+                    type="text"
+                    placeholder="Jean Dupont"
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    className="w-full bg-white border border-[#cccccc] px-4 py-3 text-sm focus:border-black focus:outline-none transition-colors font-sans rounded-md text-primary"
+                  />
                 </div>
-              )}
 
-              {isLoginTab ? (
-                /* SIGN IN FORM */
-                <form onSubmit={handleLoginSubmit} className="flex flex-col gap-4">
-                  <div>
-                    <label htmlFor="login-email" className="text-[10px] uppercase font-bold tracking-widest text-[#111111] mb-1.5 block font-sans">Email Address</label>
+                <div>
+                  <label htmlFor="reg-email" className="text-[10px] uppercase font-bold tracking-widest text-[#111111] mb-1.5 block font-sans">Email Address</label>
+                  <input
+                    id="reg-email"
+                    type="email"
+                    placeholder="jean.dupont@atelier.com"
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    className="w-full bg-white border border-[#cccccc] px-4 py-3 text-sm focus:border-black focus:outline-none transition-colors font-sans rounded-md text-primary"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="reg-password" className="text-[10px] uppercase font-bold tracking-widest text-[#111111] mb-1.5 block font-sans">Password</label>
+                  <div className="relative">
                     <input
-                      id="login-email"
-                      type="email"
-                      placeholder="Enter your email"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      className="w-full bg-white border border-[#cccccc] px-4 py-3 text-sm focus:border-black focus:outline-none transition-colors font-sans rounded-md text-primary"
+                      id="reg-password"
+                      type={showRegPassword ? "text" : "password"}
+                      placeholder="At least 6 characters"
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      className="w-full bg-white border border-[#cccccc] pl-4 pr-12 py-3 text-sm focus:border-black focus:outline-none transition-colors font-sans rounded-md text-primary"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPassword(!showRegPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-wider text-primary-muted hover:text-[#111111] font-sans font-bold flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
+                    >
+                      {showRegPassword ? (
+                        <>
+                          <EyeOff className="w-3.5 h-3.5" />
+                          <span>Hide</span>
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Show</span>
+                        </>
+                      )}
+                    </button>
                   </div>
+                </div>
 
-                  <div>
-                    <div className="flex justify-between items-baseline mb-1.5">
-                      <label htmlFor="login-password" className="text-[10px] uppercase font-bold tracking-widest text-[#111111] block font-sans">Password</label>
-                      <span className="text-[10px] text-primary-muted hover:text-[#111111] cursor-pointer uppercase tracking-wider font-semibold font-sans underline">Forgot Password?</span>
-                    </div>
-                    <div className="relative">
-                      <input
-                        id="login-password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="••••••••"
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        className="w-full bg-white border border-[#cccccc] pl-4 pr-12 py-3 text-sm focus:border-black focus:outline-none transition-colors font-sans rounded-md text-primary"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-wider text-primary-muted hover:text-[#111111] font-sans font-bold flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
-                      >
-                        {showPassword ? (
-                          <>
-                            <EyeOff className="w-3.5 h-3.5" />
-                            <span>Hide</span>
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>Show</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full bg-[#1c1c1c] hover:bg-black text-white border border-[#1c1c1c] hover:border-black py-3.5 text-xs uppercase tracking-widest font-sans font-bold transition-all duration-300 rounded-full cursor-pointer shadow-md shadow-black/10 active:scale-[0.99] mt-2"
-                  >
-                    Sign In
-                  </button>
-                </form>
-              ) : (
-                /* CREATE ACCOUNT FORM */
-                <form onSubmit={handleSignupSubmit} className="flex flex-col gap-4">
-                  <div>
-                    <label htmlFor="reg-name" className="text-[10px] uppercase font-bold tracking-widest text-[#111111] mb-1.5 block font-sans">Full Name</label>
+                <div>
+                  <label htmlFor="reg-confirm" className="text-[10px] uppercase font-bold tracking-widest text-[#111111] mb-1.5 block font-sans font-medium">Confirm Password</label>
+                  <div className="relative">
                     <input
-                      id="reg-name"
-                      type="text"
-                      placeholder="Jean Dupont"
-                      value={regName}
-                      onChange={(e) => setRegName(e.target.value)}
-                      className="w-full bg-white border border-[#cccccc] px-4 py-3 text-sm focus:border-black focus:outline-none transition-colors font-sans rounded-md text-primary"
+                      id="reg-confirm"
+                      type={showRegConfirm ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={regConfirm}
+                      onChange={(e) => setRegConfirm(e.target.value)}
+                      className="w-full bg-white border border-[#cccccc] pl-4 pr-12 py-3 text-sm focus:border-black focus:outline-none transition-colors font-sans rounded-md text-primary"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegConfirm(!showRegConfirm)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-wider text-primary-muted hover:text-[#111111] font-sans font-bold flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
+                    >
+                      {showRegConfirm ? (
+                        <>
+                          <EyeOff className="w-3.5 h-3.5" />
+                          <span>Hide</span>
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Show</span>
+                        </>
+                      )}
+                    </button>
                   </div>
-
-                  <div>
-                    <label htmlFor="reg-email" className="text-[10px] uppercase font-bold tracking-widest text-[#111111] mb-1.5 block font-sans">Email Address</label>
-                    <input
-                      id="reg-email"
-                      type="email"
-                      placeholder="jean.dupont@atelier.com"
-                      value={regEmail}
-                      onChange={(e) => setRegEmail(e.target.value)}
-                      className="w-full bg-white border border-[#cccccc] px-4 py-3 text-sm focus:border-black focus:outline-none transition-colors font-sans rounded-md text-primary"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="reg-password" className="text-[10px] uppercase font-bold tracking-widest text-[#111111] mb-1.5 block font-sans">Password</label>
-                    <div className="relative">
-                      <input
-                        id="reg-password"
-                        type={showRegPassword ? "text" : "password"}
-                        placeholder="At least 6 characters"
-                        value={regPassword}
-                        onChange={(e) => setRegPassword(e.target.value)}
-                        className="w-full bg-white border border-[#cccccc] pl-4 pr-12 py-3 text-sm focus:border-black focus:outline-none transition-colors font-sans rounded-md text-primary"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowRegPassword(!showRegPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-wider text-primary-muted hover:text-[#111111] font-sans font-bold flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
-                      >
-                        {showRegPassword ? (
-                          <>
-                            <EyeOff className="w-3.5 h-3.5" />
-                            <span>Hide</span>
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>Show</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label htmlFor="reg-confirm" className="text-[10px] uppercase font-bold tracking-widest text-[#111111] mb-1.5 block font-sans font-medium">Confirm Password</label>
-                    <div className="relative">
-                      <input
-                        id="reg-confirm"
-                        type={showRegConfirm ? "text" : "password"}
-                        placeholder="••••••••"
-                        value={regConfirm}
-                        onChange={(e) => setRegConfirm(e.target.value)}
-                        className="w-full bg-white border border-[#cccccc] pl-4 pr-12 py-3 text-sm focus:border-black focus:outline-none transition-colors font-sans rounded-md text-primary"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowRegConfirm(!showRegConfirm)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-wider text-primary-muted hover:text-[#111111] font-sans font-bold flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
-                      >
-                        {showRegConfirm ? (
-                          <>
-                            <EyeOff className="w-3.5 h-3.5" />
-                            <span>Hide</span>
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>Show</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full bg-[#1c1c1c] hover:bg-black text-white border border-[#1c1c1c] hover:border-black py-3.5 text-xs uppercase tracking-widest font-sans font-bold transition-all duration-300 rounded-full cursor-pointer shadow-md shadow-black/10 active:scale-[0.99] mt-2"
-                  >
-                    Create Account
-                  </button>
-                </form>
-              )}
-
-              {/* Google OAuth Option */}
-              <div className="flex flex-col gap-3">
-                {/* Divider */}
-                <div className="flex items-center my-1">
-                  <div className="flex-grow border-t border-[#e5e7eb]"></div>
-                  <span className="px-3 text-[9px] uppercase tracking-widest text-[#111111]/40 font-bold font-sans">or</span>
-                  <div className="flex-grow border-t border-[#e5e7eb]"></div>
                 </div>
 
                 <button
-                  onClick={handleGoogleLogin}
-                  type="button"
-                  className="w-full bg-white text-[#111111] border border-[#cccccc] hover:border-[#111111] py-3.5 px-4 text-xs uppercase tracking-widest font-sans font-bold transition-all duration-300 flex items-center justify-center gap-2 rounded-full cursor-pointer hover:bg-luxury-cream/10 active:scale-[0.99] shadow-sm"
+                  type="submit"
+                  className="w-full bg-[#1c1c1c] hover:bg-black text-white border border-[#1c1c1c] hover:border-black py-3.5 text-xs uppercase tracking-widest font-sans font-bold transition-all duration-300 rounded-full cursor-pointer shadow-md shadow-black/10 active:scale-[0.99] mt-2"
                 >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05" />
-                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                  </svg>
-                  Continue with Google
+                  Create Account
                 </button>
+              </form>
+            )}
+
+            {/* Google OAuth Option */}
+            <div className="flex flex-col gap-3">
+              {/* Divider */}
+              <div className="flex items-center my-1">
+                <div className="flex-grow border-t border-[#e5e7eb]"></div>
+                <span className="px-3 text-[9px] uppercase tracking-widest text-[#111111]/40 font-bold font-sans">or</span>
+                <div className="flex-grow border-t border-[#e5e7eb]"></div>
               </div>
 
-              {/* Bottom Toggle Link */}
-              <div className="text-[10px] text-center text-primary-muted font-sans uppercase tracking-widest mt-1">
-                {isLoginTab ? (
-                  <>
-                    Don't have an account?{' '}
-                    <span 
-                      onClick={() => { setIsLoginTab(false); setAuthError(''); }}
-                      className="text-[#111111] font-bold cursor-pointer underline hover:text-black ml-1"
-                    >
-                      CREATE ONE
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    Already have an account?{' '}
-                    <span 
-                      onClick={() => { setIsLoginTab(true); setAuthError(''); }}
-                      className="text-[#111111] font-bold cursor-pointer underline hover:text-black ml-1"
-                    >
-                      SIGN IN
-                    </span>
-                  </>
-                )}
-              </div>
-
-              {/* Guest link */}
-              <div className="text-center mt-1">
-                <span 
-                  onClick={() => navigate('/')}
-                  className="text-[11px] text-center text-primary-muted hover:text-[#111111] cursor-pointer font-sans underline block transition-colors font-medium"
-                >
-                  Continue as Guest
-                </span>
-              </div>
+              <button
+                onClick={handleGoogleLogin}
+                type="button"
+                className="w-full bg-white text-[#111111] border border-[#cccccc] hover:border-[#111111] py-3.5 px-4 text-xs uppercase tracking-widest font-sans font-bold transition-all duration-300 flex items-center justify-center gap-2 rounded-full cursor-pointer hover:bg-luxury-cream/10 active:scale-[0.99] shadow-sm"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05" />
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                </svg>
+                Continue with Google
+              </button>
             </div>
-          )}
+
+            {/* Bottom Toggle Link */}
+            <div className="text-[10px] text-center text-primary-muted font-sans uppercase tracking-widest mt-1">
+              {isLoginTab ? (
+                <>
+                  Don't have an account?{' '}
+                  <span 
+                    onClick={() => { setIsLoginTab(false); setAuthError(''); }}
+                    className="text-[#111111] font-bold cursor-pointer underline hover:text-black ml-1"
+                  >
+                    CREATE ONE
+                  </span>
+                </>
+              ) : (
+                <>
+                  Already have an account?{' '}
+                  <span 
+                    onClick={() => { setIsLoginTab(true); setAuthError(''); }}
+                    className="text-[#111111] font-bold cursor-pointer underline hover:text-black ml-1"
+                  >
+                    SIGN IN
+                  </span>
+                </>
+              )}
+            </div>
+
+            {/* Guest link */}
+            <div className="text-center mt-1">
+              <span 
+                onClick={() => navigate('/')}
+                className="text-[11px] text-center text-primary-muted hover:text-[#111111] cursor-pointer font-sans underline block transition-colors font-medium"
+              >
+                Continue as Guest
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     );

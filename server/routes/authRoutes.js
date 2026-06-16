@@ -1,7 +1,7 @@
 import express from 'express';
 import passport from 'passport';
 import '../config/passport.js'; // Initialize Google Strategy configuration
-import { register, login, logout, getProfile, refreshToken, verifyRegisterOtp, resendRegisterOtp, verifyLoginOtp, resendLoginOtp } from '../controllers/authController.js';
+import { register, login, logout, getProfile, refreshToken } from '../controllers/authController.js';
 import { validateRegister, validateLogin } from '../middleware/validate.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { signAccessToken, signRefreshToken } from '../utils/jwt.js';
@@ -14,12 +14,6 @@ router.post('/login', validateLogin, login);
 router.post('/logout', logout);
 router.post('/refresh', refreshToken);
 router.get('/profile', protect, getProfile);
-
-// Email OTP Auth
-router.post('/verify-register-otp', verifyRegisterOtp);
-router.post('/resend-register-otp', resendRegisterOtp);
-router.post('/verify-login-otp', verifyLoginOtp);
-router.post('/resend-login-otp', resendLoginOtp);
 
 // Google OAuth
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'], session: false }));

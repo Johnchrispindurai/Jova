@@ -19,17 +19,9 @@ interface UserState {
   setPendingWishlistAction: (product: Product | null) => void;
   pendingCartAction: PendingCartAction | null;
   setPendingCartAction: (action: PendingCartAction | null) => void;
-  authStep: 'idle' | 'registerOtp' | 'loginOtp';
-  pendingRegisterEmail: string | null;
-  pendingLoginEmail: string | null;
-  setAuthStep: (step: 'idle' | 'registerOtp' | 'loginOtp') => void;
   checkAuth: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
-  verifyRegisterOtp: (email: string, code: string) => Promise<void>;
-  resendRegisterOtp: (email: string) => Promise<void>;
-  verifyLoginOtp: (email: string, code: string) => Promise<void>;
-  resendLoginOtp: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   addOrder: (order: Order) => void;
   updateProfile: (profile: Partial<UserProfile>) => void;
@@ -81,44 +73,7 @@ export const useUserStore = create<UserState>((set) => ({
       return null;
     }
   })(),
-  authStep: (() => {
-    try {
-      const step = sessionStorage.getItem('authStep');
-      return (step as any) || 'idle';
-    } catch {
-      return 'idle';
-    }
-  })(),
-  pendingRegisterEmail: (() => {
-    try {
-      return sessionStorage.getItem('pendingRegisterEmail');
-    } catch {
-      return null;
-    }
-  })(),
-  pendingLoginEmail: (() => {
-    try {
-      return sessionStorage.getItem('pendingLoginEmail');
-    } catch {
-      return null;
-    }
-  })(),
 
-  setAuthStep: (step) => {
-    set({ authStep: step });
-    try {
-      sessionStorage.setItem('authStep', step);
-      if (step === 'idle') {
-        sessionStorage.removeItem('pendingRegisterEmail');
-        sessionStorage.removeItem('pendingLoginEmail');
-        sessionStorage.removeItem('pendingOtpGeneratedAt');
-        sessionStorage.removeItem('pendingOtpAttempts');
-        set({ pendingRegisterEmail: null, pendingLoginEmail: null });
-      }
-    } catch (e) {
-      console.error('Failed to sync authStep to sessionStorage', e);
-    }
-  },
 
   setPendingWishlistAction: (product) => {
     set({ pendingWishlistAction: product });
@@ -175,16 +130,19 @@ export const useUserStore = create<UserState>((set) => ({
   login: async (email, password) => {
     try {
       const response = await api.post('/auth/login', { email, password });
-      if (response.data?.success) {
-        set({ authStep: 'loginOtp', pendingLoginEmail: email });
-        try {
-          sessionStorage.setItem('authStep', 'loginOtp');
-          sessionStorage.setItem('pendingLoginEmail', email);
-          sessionStorage.setItem('pendingOtpGeneratedAt', Date.now().toString());
-          sessionStorage.setItem('pendingOtpAttempts', '3');
-        } catch (e) {
-          console.error(e);
-        }
+      const backendUser = response.data?.data?.user;
+      if (backendUser) {
+        set({
+          user: {
+            name: backendUser.name,
+            email: backendUser.email,
+            phone: backendUser.phone || '',
+            addresses: backendUser.addresses || [],
+            savedCards: backendUser.savedCards || []
+          },
+          isAuthenticated: true
+        });
+        useToastStore.getState().addToast(`Welcome back, ${backendUser.name}!`, 'success');
       }
     } catch (error: any) {
       const message = error.response?.data?.message || 'Incorrect email or password';
@@ -196,34 +154,8 @@ export const useUserStore = create<UserState>((set) => ({
   signup: async (name, email, password) => {
     try {
       const response = await api.post('/auth/register', { name, email, password });
-      if (response.data?.success) {
-        set({ authStep: 'registerOtp', pendingRegisterEmail: email });
-        try {
-          sessionStorage.setItem('authStep', 'registerOtp');
-          sessionStorage.setItem('pendingRegisterEmail', email);
-          sessionStorage.setItem('pendingOtpGeneratedAt', Date.now().toString());
-          sessionStorage.setItem('pendingOtpAttempts', '3');
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Registration failed';
-      useToastStore.getState().addToast(message, 'error');
-      throw error;
-    }
-  },
-
-  verifyRegisterOtp: async (email, code) => {
-    try {
-      const response = await api.post('/auth/verify-register-otp', { email, otp: code });
       const backendUser = response.data?.data?.user;
       if (backendUser) {
-        sessionStorage.removeItem('authStep');
-        sessionStorage.removeItem('pendingRegisterEmail');
-        sessionStorage.removeItem('pendingOtpGeneratedAt');
-        sessionStorage.removeItem('pendingOtpAttempts');
-
         set({
           user: {
             name: backendUser.name,
@@ -232,79 +164,12 @@ export const useUserStore = create<UserState>((set) => ({
             addresses: backendUser.addresses || [],
             savedCards: backendUser.savedCards || []
           },
-          isAuthenticated: true,
-          authStep: 'idle',
-          pendingRegisterEmail: null
+          isAuthenticated: true
         });
         useToastStore.getState().addToast('Account created successfully!', 'success');
       }
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Verification failed';
-      useToastStore.getState().addToast(message, 'error');
-      throw error;
-    }
-  },
-
-  resendRegisterOtp: async (email) => {
-    try {
-      const response = await api.post('/auth/resend-register-otp', { email });
-      if (response.data?.success) {
-        try {
-          sessionStorage.setItem('pendingOtpGeneratedAt', Date.now().toString());
-          sessionStorage.setItem('pendingOtpAttempts', '3');
-        } catch {}
-        useToastStore.getState().addToast('Verification code resent successfully', 'success');
-      }
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Resend code failed';
-      useToastStore.getState().addToast(message, 'error');
-      throw error;
-    }
-  },
-
-  verifyLoginOtp: async (email, code) => {
-    try {
-      const response = await api.post('/auth/verify-login-otp', { email, otp: code });
-      const backendUser = response.data?.data?.user;
-      if (backendUser) {
-        sessionStorage.removeItem('authStep');
-        sessionStorage.removeItem('pendingLoginEmail');
-        sessionStorage.removeItem('pendingOtpGeneratedAt');
-        sessionStorage.removeItem('pendingOtpAttempts');
-
-        set({
-          user: {
-            name: backendUser.name,
-            email: backendUser.email,
-            phone: backendUser.phone || '',
-            addresses: backendUser.addresses || [],
-            savedCards: backendUser.savedCards || []
-          },
-          isAuthenticated: true,
-          authStep: 'idle',
-          pendingLoginEmail: null
-        });
-        useToastStore.getState().addToast(`Welcome back, ${backendUser.name}!`, 'success');
-      }
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Verification failed';
-      useToastStore.getState().addToast(message, 'error');
-      throw error;
-    }
-  },
-
-  resendLoginOtp: async (email) => {
-    try {
-      const response = await api.post('/auth/resend-login-otp', { email });
-      if (response.data?.success) {
-        try {
-          sessionStorage.setItem('pendingOtpGeneratedAt', Date.now().toString());
-          sessionStorage.setItem('pendingOtpAttempts', '3');
-        } catch {}
-        useToastStore.getState().addToast('Verification code resent successfully', 'success');
-      }
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Resend code failed';
+      const message = error.response?.data?.message || 'Registration failed';
       useToastStore.getState().addToast(message, 'error');
       throw error;
     }
